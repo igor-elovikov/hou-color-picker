@@ -1,7 +1,9 @@
 import sys
 
+import hdefereval
 import hou
 import numpy as np
+from eyedropperprefs import TransformSettings, settings
 from PySide2.QtCore import QPoint, QPointF, QRect, QRectF, Qt
 from PySide2.QtGui import (
     QBrush,
@@ -32,57 +34,22 @@ from PySide2.QtWidgets import (
     QWidget,
 )
 
+
+def transform_color(
+    color: hou.Color | tuple[float, ...], setting: TransformSettings
+) -> tuple[float, float, float]:
+    if isinstance(color, hou.Color):
+        hcolor: hou.Color = color
+    else:
+        hcolor: hou.Color = hou.Color(color)
+    result = hcolor.ocio_transform(setting.source_space, setting.dest_space, "")
+    return result.rgb()
+
+
 form = None
 
 SHARP_PRECISION = 0.01
 TOLERANCE = 0.0001
-
-
-def is_color_ramp(parms):
-    if not parms:
-        return False
-    parm = parms[0]  # type: hou.Parm
-    parm_template = parm.parmTemplate()  # type: hou.ParmTemplate
-
-    if (
-        parm_template.type() == hou.parmTemplateType.Ramp
-        and parm_template.parmType() == hou.rampParmType.Color
-    ):
-        return True
-
-    return False
-
-
-def is_color_parm(parms):
-    if not parms:
-        return False
-
-    parm = parms[0]  # type: hou.Parm
-    parm_template = parm.parmTemplate()  # type: hou.ParmTemplate
-
-    if (
-        parm_template.type() == hou.parmTemplateType.Float
-        and (parm_template.numComponents() == 3 or parm_template.numComponents() == 4)
-        and parm_template.namingScheme() == hou.parmNamingScheme.RGBA
-    ):
-        return True
-
-    return False
-
-
-def is_float_ramp(parms):
-    if not parms:
-        return False
-    parm = parms[0]  # type: hou.Parm
-    parm_template = parm.parmTemplate()  # type: hou.ParmTemplate
-
-    if (
-        parm_template.type() == hou.parmTemplateType.Ramp
-        and parm_template.parmType() == hou.rampParmType.Float
-    ):
-        return True
-
-    return False
 
 
 class ColorInformation(QGraphicsItem):
@@ -168,6 +135,7 @@ class ScreenshotView(QGraphicsView):
         self.picked_color = QColor()
 
         self.disable_gamma_correction = False
+        self.transform_setting = settings.transform
 
         if self.underMouse():
             self.color_info.show()
@@ -189,65 +157,6 @@ class ScreenshotView(QGraphicsView):
             self.color_info.color = QColor(self.screen_image.pixel(image_pos.x(), image_pos.y()))
         self.color_info.setPos(pos)
         self.color_info.pos = pos
-
-    def write_ramp_sketch(self):
-        if len(self.positions) < 2:
-            return
-
-        positions = np.array([(float(p.x()), float(-p.y())) for p in self.positions])
-
-        min_point = positions.min(axis=0)
-        max_point = positions.max(axis=0)
-
-        ramp_range = max_point - min_point
-
-        if not np.any((ramp_range == 0.0)):
-            norm_positions = (positions - min_point) / ramp_range
-
-            geo_points = []
-            geo_points.append(hou.Vector3(norm_positions[0][0], norm_positions[0][1], 0.0))
-            left = 0.0
-            for pt in norm_positions[1:-1]:
-                if pt[0] >= left:
-                    left = pt[0]
-                    geo_points.append(hou.Vector3(pt[0], pt[1], 0.0))
-
-            geo_points.append(hou.Vector3(norm_positions[-1][0], norm_positions[-1][1], 0.0))
-
-            ramp_geo = hou.Geometry()  # type: hou.Geometry
-            ramp_points = ramp_geo.createPoints(geo_points)
-            ramp_geo.createPolygons((ramp_points,), False)
-
-            resample_verb = hou.sopNodeTypeCategory().nodeVerb("resample")  # type: hou.SopVerb
-            resample_verb.setParms({"length": 0.04})
-
-            resample_verb.execute(ramp_geo, [ramp_geo])
-
-            facet_verb = hou.sopNodeTypeCategory().nodeVerb("facet")  # type: hou.SopVerb
-            facet_verb.setParms({"inline": 1, "inlinedist": 0.003})
-
-            facet_verb.execute(ramp_geo, [ramp_geo])
-
-            ramp_poly = ramp_geo.prim(0)
-            ramp_points = ramp_poly.points()
-
-            ramp_basis = (
-                hou.rampBasis.BSpline if self.disable_gamma_correction else hou.rampBasis.Linear
-            )
-
-            basis = []
-            keys = []
-            values = []
-
-            for point in ramp_points:  # type: hou.Point
-                basis.append(ramp_basis)
-                pos = point.position()
-                keys.append(pos.x())
-                values.append(pos.y())
-
-            ramp = hou.Ramp(basis, keys, values)
-            self.parm.set(ramp)
-            self.parm.pressButton()
 
     def write_color_ramp(self):
         if len(self.colors) < 2:
@@ -318,8 +227,7 @@ class ScreenshotView(QGraphicsView):
             keys.append(point.attribValue(pos_attrib))
             values.append(tuple(point.position()))
 
-        if not self.disable_gamma_correction:
-            values = [np.power(v, 2.2) for v in values]
+        values = [transform_color(v, self.transform_setting) for v in values]
 
         ramp = hou.Ramp(basis, keys, values)
         self.parm.set(ramp)
@@ -350,10 +258,15 @@ class ScreenshotView(QGraphicsView):
         return QGraphicsView.mouseMoveEvent(self, event)
 
     def mousePressEvent(self, event):
+        print("mouse press")
         modifiers = QApplication.keyboardModifiers()
 
         if modifiers & Qt.ShiftModifier:
             self.disable_gamma_correction = True
+            self.transform_setting = settings.transform_with_shift
+
+        if modifiers & Qt.ControlModifier:
+            self.transform_setting = settings.transform_with_control
 
         if self.gradient_edit or self.ramp_sketch:
             self.draw_path = True
@@ -363,21 +276,19 @@ class ScreenshotView(QGraphicsView):
             self.picked_color = self.color_info.color
 
     def mouseReleaseEvent(self, event):
+        print("mouse release")
         if self.gradient_edit and self.draw_path:
             self.write_color_ramp()
-        elif self.ramp_sketch and self.draw_path:
-            self.write_ramp_sketch()
         elif not self.gradient_edit:
 
             picked_color = hou.qt.fromQColor(self.picked_color)[0]
-            # out_color = picked_color.ocio_transform("sRGB - Texture", "Linear Rec.709 (sRGB)", "")
-            out_color = picked_color.ocio_transform("sRGB - Texture", "ACEScg", "")
+            out_color = transform_color(picked_color, self.transform_setting)
 
             if isinstance(self.parm, hou.ParmTuple) and len(self.parm) == 4:
                 alpha = self.parm[3].eval()
                 out_color = np.append(out_color, alpha)
 
-            self.parm.set(out_color.rgb())
+            self.parm.set(out_color)
 
         if self.parent() is not None:
             self.parent().mouseReleaseEvent(event)
@@ -419,24 +330,23 @@ class ScreensMain(QMainWindow):
                 self.additional_windows.append(additional_window)
 
     def close_children(self):
-        children = self.findChildren(ScreensMain)
-        if children:
-            for child in children:
-                child.close()
+        if self.additional_windows:
+            for window in self.additional_windows:
+                window.close()
 
     def close_all(self):
-        self.close()
         parent = self.parent()
-        if parent is not None:
+
+        if parent is None:
+            self.close_children()
+            self.close()
+        else:
+            parent.close_children()
             parent.close()
-            if isinstance(parent, ScreensMain):
-                parent.close_children()
 
-        self.close_children()
-
-        if sys.platform == "darwin":
-            global form
-            del form
+        # if sys.platform == "darwin":
+        #     global form
+        #     hdefereval.executeDeferred(delete_form)
 
     def mouseReleaseEvent(self, event):
         self.close_all()
@@ -445,6 +355,12 @@ class ScreensMain(QMainWindow):
         modifiers = event.modifiers()
         if not modifiers & Qt.ShiftModifier:
             self.close_all()
+
+
+def delete_form():
+    print("delete form")
+    global form
+    del form
 
 
 def show_color_picker(parm):
@@ -458,10 +374,4 @@ def show_color_picker(parm):
 def show_gradient_picker(parm):
     global form
     form = ScreensMain(parm, True, False)
-    form.show()
-
-
-def show_ramp_sketch(parm):
-    global form
-    form = ScreensMain(parm, False, True)
     form.show()

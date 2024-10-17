@@ -1,9 +1,15 @@
-from dataclasses import dataclass, field, fields, is_dataclass
+import json
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import hou
+from PySide2.QtCore import Qt
 from PySide2.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
+
+user_pref_dir = Path(hou.getEnvConfigValue("HOUDINI_USER_PREF_DIR"))
+settings_file = user_pref_dir / "h-color-picker.json"
 
 
 def _strip_unused_keys(data_class: type, d: dict[str, Any]) -> dict[str, Any]:
@@ -12,7 +18,6 @@ def _strip_unused_keys(data_class: type, d: dict[str, Any]) -> dict[str, Any]:
 
 
 def _from_dict(data_class: type, d: dict[str, Any] | Any) -> Any:
-    print(data_class, d)
     if is_dataclass(data_class):
         field_types = {f.name: f.type for f in fields(data_class)}
         stripped_dict = _strip_unused_keys(data_class, d)
@@ -20,7 +25,7 @@ def _from_dict(data_class: type, d: dict[str, Any] | Any) -> Any:
     return d
 
 
-class NonOcioTransform(Enum):
+class NonOcioTransform(str, Enum):
     NO = "No Transform"
     GAMMA = "Gamma Correction"
     INVERSE_GAMMA = "Inverse Gamma Correction"
@@ -51,7 +56,36 @@ class Settings:
     )
 
 
-settings = Settings()
+settings: Settings = Settings()
+
+
+def load_settings():
+    if not settings_file.exists():
+        return
+
+    global settings
+
+    try:
+        with open(settings_file, "r") as file:
+            json_dict = json.load(file)
+            settings = _from_dict(Settings, json_dict)
+    except Exception as e:
+        settings = Settings()
+        pass
+
+
+def save_settings():
+    json_string = json.dumps(asdict(settings), indent=2)
+    with open(settings_file, "w") as file:
+        file.write(json_string)
+
+
+class HouIcon(QLabel):
+    def __init__(self, icon_name: str, size=64, parent: QWidget | None = None):
+        super().__init__(parent)
+        icon = hou.qt.Icon(icon_name)
+        if icon is not None:
+            self.setPixmap(icon.pixmap(size, size))
 
 
 class OcioSpaceSelector(QComboBox):
@@ -69,8 +103,14 @@ class TransformSettingsEditor(QWidget):
         self.setLayout(layout)
 
         label = QLabel(name)
-        label.setFixedWidth(400)
+        label.setFixedWidth(100)
+        label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         layout.addWidget(label)
+
+        layout.addWidget(HouIcon("KEYS_LMB"))
+
+        separator = QLabel("<b><font size=18> : </font></b>")
+        layout.addWidget(separator)
 
         source_space_selector = OcioSpaceSelector(target.source_space)
         source_space_selector.currentTextChanged.connect(lambda t: target.set_source_space(t))
@@ -80,10 +120,7 @@ class TransformSettingsEditor(QWidget):
 
         layout.addWidget(source_space_selector)
 
-        forward_arrow = QLabel()
-        icon = hou.qt.Icon("BUTTONS_forward")
-        forward_arrow.setPixmap(icon.pixmap(64, 64))
-        layout.addWidget(forward_arrow)
+        layout.addWidget(HouIcon("BUTTONS_forward"))
         layout.addWidget(dest_space_selector)
 
 
@@ -101,18 +138,23 @@ class SettingsEditor(QMainWindow):
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
-        layout.addWidget(TransformSettingsEditor(settings.transform, "Standart Transform: "))
+        layout.addWidget(TransformSettingsEditor(settings.transform, ""))
         layout.addWidget(
-            TransformSettingsEditor(settings.transform_with_shift, "Transform with [Shift]: ")
+            TransformSettingsEditor(
+                settings.transform_with_shift,
+                "<b><font size=18>Shift +</font></b>",
+            )
         )
         layout.addWidget(
-            TransformSettingsEditor(settings.transform_with_control, "Transform with [Control]: ")
+            TransformSettingsEditor(
+                settings.transform_with_control, "<b><font size=18>Ctrl +</font></b>"
+            )
         )
 
     def closeEvent(self, event):
         global settings_editor
         settings_editor = None
-        print(settings)
+        save_settings()
         event.accept()
 
 

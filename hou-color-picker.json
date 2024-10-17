@@ -1,9 +1,4 @@
 {
-  "path": "$HCOLORPICKER",
-  "load_package_once": true,
-  "env": [
-    {
-      "HCOLORPICKER": "== PATH TO PACKAGE GOES HERE  =="
-    }
-  ]
+  "path": "== PATH TO PACKAGE GOES HERE  ==",
+  "load_package_once": true
 }
