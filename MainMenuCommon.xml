@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mainMenu>
+    <menuBar>
+        <subMenu id="edit_menu">
+            <scriptItem id="h.color_picker_options">
+                <insertAfter>h.ocio_editor</insertAfter>
+                <label>Color Picker Settings...</label>
+                <scriptCode><![CDATA[
+import eyedropperprefs
+eyedropperprefs.show_settings_editor()
+                    ]]></scriptCode>
+            </scriptItem>
+        </subMenu>
+    </menuBar>
+</mainMenu>
