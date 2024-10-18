@@ -270,8 +270,7 @@ class ScreenshotView(QGraphicsView):
 
             self.parm.set(out_color)
 
-        if self.parent() is not None:
-            self.parent().mouseReleaseEvent(event)
+        close_picker()
 
 
 class ScreensMain(QMainWindow):
@@ -306,20 +305,18 @@ class ScreensMain(QMainWindow):
 
         if screen is None:
             for screen in screens[1:]:
-                additional_window = ScreensMain(parm, gradient_edit, ramp_sketch, self, screen)
+                additional_window = ScreensMain(parm, gradient_edit, ramp_sketch, None, screen)
                 self.additional_windows.append(additional_window)
 
     def close_children(self):
         if self.additional_windows:
             for window in self.additional_windows:
+                window.setParent(None)
                 window.close()
 
     def close_all(self):
         self.close_children()
         self.close()
-
-    def mouseReleaseEvent(self, event):
-        close_picker()
 
     def keyPressEvent(self, event):
         modifiers = event.modifiers()
@@ -329,7 +326,9 @@ class ScreensMain(QMainWindow):
 
 
 def close_picker():
+    global form
     form.close_all()
+    form = None
 
 
 def show_color_picker(parm):
