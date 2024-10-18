@@ -335,32 +335,21 @@ class ScreensMain(QMainWindow):
                 window.close()
 
     def close_all(self):
-        parent = self.parent()
-
-        if parent is None:
-            self.close_children()
-            self.close()
-        else:
-            parent.close_children()
-            parent.close()
-
-        # if sys.platform == "darwin":
-        #     global form
-        #     hdefereval.executeDeferred(delete_form)
+        self.close_children()
+        self.close()
 
     def mouseReleaseEvent(self, event):
-        self.close_all()
+        close_picker()
 
     def keyPressEvent(self, event):
         modifiers = event.modifiers()
-        if not modifiers & Qt.ShiftModifier:
-            self.close_all()
+        shift_or_control = modifiers & Qt.ShiftModifier or modifiers & Qt.ControlModifier
+        if not shift_or_control:
+            close_picker()
 
 
-def delete_form():
-    print("delete form")
-    global form
-    del form
+def close_picker():
+    form.close_all()
 
 
 def show_color_picker(parm):
