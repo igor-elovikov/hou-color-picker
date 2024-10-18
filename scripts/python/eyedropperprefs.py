@@ -44,6 +44,13 @@ class TransformSettings:
     def set_dest_space(self, space: str):
         self.dest_space = space
 
+    def validate(self):
+        ocio_spaces = hou.Color.ocio_spaces()
+        if self.source_space not in ocio_spaces:
+            self.source_space = ocio_spaces[0]
+        if self.dest_space not in ocio_spaces:
+            self.dest_space = ocio_spaces[0]
+
 
 @dataclass
 class Settings:
@@ -54,6 +61,11 @@ class Settings:
     transform_with_control: TransformSettings = field(
         default_factory=lambda: TransformSettings(dest_space="Raw")
     )
+
+    def validate(self):
+        self.transform.validate()
+        self.transform_with_shift.validate()
+        self.transform_with_control.validate()
 
 
 settings: Settings = Settings()
@@ -72,6 +84,8 @@ def load_settings():
     except Exception as e:
         settings = Settings()
         pass
+
+    settings.validate()
 
 
 def save_settings():
@@ -161,6 +175,7 @@ class SettingsEditor(QMainWindow):
 
 def show_settings_editor():
     global settings_editor
+    settings.validate()
 
     if settings_editor is None:
         settings_editor = SettingsEditor()

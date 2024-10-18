@@ -1,6 +1,7 @@
 import sys
 
 import eyedropperprefs
+import hdefereval
 import hou
 import numpy as np
 from eyedropperprefs import TransformSettings
@@ -43,12 +44,26 @@ class ColorInformation(QGraphicsItem):
         self.pos = QPoint()
 
     def boundingRect(self):
-        return QRectF(0, 0, 130, 100)
+        return QRectF(-15, -15, 145, 145)
 
     def paint(self, painter, option, widget=None):
         painter.setBrush(QBrush(self.color))
         painter.setFont(self.font)
 
+        black_pen = QPen(Qt.black, 3, Qt.SolidLine)
+        painter.setPen(black_pen)
+
+        painter.drawLine(-10, 0, 10, 0)
+        painter.drawLine(0, -10, 0, 10)
+
+        white_pen = QPen(Qt.white, 1, Qt.SolidLine)
+        painter.setPen(white_pen)
+
+        painter.drawLine(-10, 0, 10, 0)
+        painter.drawLine(0, -10, 0, 10)
+
+        white_pen = QPen(Qt.white, 3, Qt.SolidLine)
+        painter.setPen(white_pen)
         painter.drawRoundedRect(12, 12, 30, 74, 5, 5)
 
         painter.setBrush(QColor(0, 0, 0, 55))
@@ -61,16 +76,18 @@ class ColorInformation(QGraphicsItem):
         painter.setPen(QPen(Qt.green))
         painter.drawText(50, 52, "G: " + str(self.color.green()))
 
-        painter.setPen(QPen(Qt.blue))
+        painter.setPen(QPen(QColor(0, 181, 249)))
         painter.drawText(50, 80, "B: " + str(self.color.blue()))
 
 
 class ScreenshotView(QGraphicsView):
-    def __init__(self, parent, screen, parm, gradient_edit, ramp_sketch):
+    def __init__(self, parent, screen, parm, gradient_edit, ramp_sketch, hot_spot=QPoint(0, 0)):
         super(ScreenshotView, self).__init__(parent)
 
-        self.scene = QGraphicsScene(parent)
-        self.setScene(self.scene)
+        self.hot_spot = hot_spot
+
+        self.screenshot_scene = QGraphicsScene(parent)
+        self.setScene(self.screenshot_scene)
 
         self.parm = parm  # type: hou.Parm
         self.screen = screen
@@ -89,15 +106,15 @@ class ScreenshotView(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setFrameStyle(QFrame.NoFrame)
-        self.scene.clear()
+        self.screenshot_scene.clear()
         self.setGeometry(screen.geometry())
 
         self.setSceneRect(0, 0, self.screen_pixmap.width(), self.screen_pixmap.height())
-        self.scene.addPixmap(self.screen_pixmap)
+        self.screenshot_scene.addPixmap(self.screen_pixmap)
 
         self.setMouseTracking(True)
         self.color_info = ColorInformation()
-        self.scene.addItem(self.color_info)
+        self.screenshot_scene.addItem(self.color_info)
 
         self.gradient_edit = gradient_edit
         self.ramp_sketch = ramp_sketch
@@ -110,7 +127,7 @@ class ScreenshotView(QGraphicsView):
             self.path_item.setPen(QPen(QColor(0, 200, 100, 200), 2))
         else:
             self.path_item.setPen(QPen(QColor(200, 200, 50, 255), 4))
-        self.scene.addItem(self.path_item)
+        self.screenshot_scene.addItem(self.path_item)
 
         self.colors = []  # type: list[QColor]
         self.positions = []  # type: list[QPoint]
@@ -232,7 +249,7 @@ class ScreenshotView(QGraphicsView):
 
         if self.draw_path:
             path = self.path_item.path()
-            path.lineTo(pos)
+            path.lineTo(pos + self.hot_spot)
             self.path_item.setPath(path)
             self.colors.append(self.color_info.color)
             self.positions.append(pos)
@@ -251,7 +268,7 @@ class ScreenshotView(QGraphicsView):
 
         if self.gradient_edit or self.ramp_sketch:
             self.draw_path = True
-            self.path.moveTo(event.pos())
+            self.path.moveTo(event.pos() + self.hot_spot)
             self.path_item.setPath(self.path)
         else:
             self.picked_color = self.color_info.color
@@ -281,9 +298,11 @@ class ScreensMain(QMainWindow):
         screens = app.screens()
         cursor_pos = QCursor.pos()
 
+        self.setCursor(Qt.BlankCursor)
+
         screen_to_attach = screens[0] if screen is None else screen
 
-        view = ScreenshotView(self, screen_to_attach, parm, gradient_edit, ramp_sketch)
+        view = ScreenshotView(None, screen_to_attach, parm, gradient_edit, ramp_sketch)
         self.view = view
         self.setWindowFlag(Qt.WindowStaysOnTopHint)
         self.setWindowFlag(Qt.FramelessWindowHint)
@@ -294,9 +313,6 @@ class ScreensMain(QMainWindow):
 
         self.setMouseTracking(True)
         self.additional_windows = []
-
-        cursor = hou.qt.getCursor("cross")
-        self.setCursor(cursor)
 
         if screen_to_attach.geometry().contains(cursor_pos) and not ramp_sketch:
             view.color_info.show()
@@ -328,7 +344,6 @@ class ScreensMain(QMainWindow):
 def close_picker():
     global form
     form.close_all()
-    form = None
 
 
 def show_color_picker(parm):
