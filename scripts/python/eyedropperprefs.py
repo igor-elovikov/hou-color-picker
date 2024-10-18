@@ -152,6 +152,7 @@ class SettingsEditor(QMainWindow):
         )
 
     def closeEvent(self, event):
+        self.setParent(None)
         global settings_editor
         settings_editor = None
         save_settings()
