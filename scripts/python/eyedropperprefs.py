@@ -142,12 +142,12 @@ class SettingsEditor(QMainWindow):
         layout.addWidget(
             TransformSettingsEditor(
                 settings.transform_with_shift,
-                "<b><font size=12>Shift +</font></b>",
+                "<b><font size=5>Shift + </font></b>",
             )
         )
         layout.addWidget(
             TransformSettingsEditor(
-                settings.transform_with_control, "<b><font size=12>Ctrl +</font></b>"
+                settings.transform_with_control, "<b><font size=5>Ctrl + </font></b>"
             )
         )
 

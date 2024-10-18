@@ -1,8 +1,9 @@
 import sys
 
+import eyedropperprefs
 import hou
 import numpy as np
-from eyedropperprefs import TransformSettings, settings
+from eyedropperprefs import TransformSettings
 from PySide2.QtCore import QPoint, QRectF, Qt
 from PySide2.QtGui import QBrush, QColor, QCursor, QFont, QImage, QPainterPath, QPen
 from PySide2.QtWidgets import (
@@ -116,7 +117,7 @@ class ScreenshotView(QGraphicsView):
         self.picked_color = QColor()
 
         self.disable_gamma_correction = False
-        self.transform_setting = settings.transform
+        self.transform_setting = eyedropperprefs.settings.transform
 
         if self.underMouse():
             self.color_info.show()
@@ -181,7 +182,7 @@ class ScreenshotView(QGraphicsView):
         ramp_points = ramp_geo.createPoints(points)
         fnum_points = float(len(self.colors) - 1)
 
-        for ptnum, point in enumerate(ramp_points):  # type: (int, hou.Point)
+        for ptnum, point in enumerate(ramp_points):
             point.setAttribValue(pos_attrib, float(pos[ptnum]) / fnum_points)
 
         ramp_poly = ramp_geo.createPolygons((ramp_points,), False)[0]  # type: hou.Face
@@ -203,7 +204,7 @@ class ScreenshotView(QGraphicsView):
 
         pos_attrib = ramp_geo.findPointAttrib("ramp_pos")
 
-        for point in ramp_points:  # type: hou.Point
+        for point in ramp_points:
             basis.append(linear)
             keys.append(point.attribValue(pos_attrib))
             values.append(tuple(point.position()))
@@ -243,10 +244,10 @@ class ScreenshotView(QGraphicsView):
 
         if modifiers & Qt.ShiftModifier:
             self.disable_gamma_correction = True
-            self.transform_setting = settings.transform_with_shift
+            self.transform_setting = eyedropperprefs.settings.transform_with_shift
 
         if modifiers & Qt.ControlModifier:
-            self.transform_setting = settings.transform_with_control
+            self.transform_setting = eyedropperprefs.settings.transform_with_control
 
         if self.gradient_edit or self.ramp_sketch:
             self.draw_path = True

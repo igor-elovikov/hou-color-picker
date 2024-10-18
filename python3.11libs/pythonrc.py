@@ -1,3 +1,3 @@
-from eyedropperprefs import load_settings  # type: ignore
+import eyedropperprefs  # type: ignore
 
-load_settings()
+eyedropperprefs.load_settings()  # type: ignore
