@@ -1,4 +1,3 @@
 {
-  "python.analysis.typeCheckingMode": "off",
-  "python.analysis.extraPaths": ["./scripts/python"]
+  "python.analysis.typeCheckingMode": "off"
 }

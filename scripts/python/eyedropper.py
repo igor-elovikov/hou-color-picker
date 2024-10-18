@@ -1,37 +1,18 @@
 import sys
 
-import hdefereval
 import hou
 import numpy as np
 from eyedropperprefs import TransformSettings, settings
-from PySide2.QtCore import QPoint, QPointF, QRect, QRectF, Qt
-from PySide2.QtGui import (
-    QBrush,
-    QColor,
-    QCursor,
-    QFont,
-    QImage,
-    QMouseEvent,
-    QPainter,
-    QPainterPath,
-    QPen,
-    QPixmap,
-    QScreen,
-)
+from PySide2.QtCore import QPoint, QRectF, Qt
+from PySide2.QtGui import QBrush, QColor, QCursor, QFont, QImage, QPainterPath, QPen
 from PySide2.QtWidgets import (
     QApplication,
-    QDialog,
     QFrame,
     QGraphicsItem,
     QGraphicsPathItem,
-    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
-    QLineEdit,
     QMainWindow,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
 )
 
 
@@ -258,7 +239,6 @@ class ScreenshotView(QGraphicsView):
         return QGraphicsView.mouseMoveEvent(self, event)
 
     def mousePressEvent(self, event):
-        print("mouse press")
         modifiers = QApplication.keyboardModifiers()
 
         if modifiers & Qt.ShiftModifier:
@@ -276,7 +256,6 @@ class ScreenshotView(QGraphicsView):
             self.picked_color = self.color_info.color
 
     def mouseReleaseEvent(self, event):
-        print("mouse release")
         if self.gradient_edit and self.draw_path:
             self.write_color_ramp()
         elif not self.gradient_edit:
