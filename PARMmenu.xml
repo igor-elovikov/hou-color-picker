@@ -7,13 +7,13 @@
         <label>Color Eyedropper</label>
         <context>
           <expression><![CDATA[
-from eyedropperutils import is_color_parm
-return is_color_parm(kwargs["parms"])          
+import eyedropperutils
+return eyedropperutils.is_color_parm(kwargs["parms"])          
           ]]></expression>
         </context>    
         <scriptCode><![CDATA[
-from eyedropper import show_color_picker
-show_color_picker(kwargs["parms"][0])
+import eyedropper
+eyedropper.show_color_picker(kwargs["parms"][0])
 ]]></scriptCode>
       </addScriptItem>
 
@@ -24,13 +24,13 @@ show_color_picker(kwargs["parms"][0])
         <label>Gradient Eyedropper</label>
         <context>
           <expression><![CDATA[
-from eyedropperutils import is_color_ramp
-return is_color_ramp(kwargs["parms"])          
+import eyedropperutils
+return eyedropperutils.is_color_ramp(kwargs["parms"])          
           ]]></expression>
         </context>
         <scriptCode><![CDATA[
-from eyedropper import show_gradient_picker
-show_gradient_picker(kwargs["parms"][0])
+import eyedropper
+eyedropper.show_gradient_picker(kwargs["parms"][0])
 ]]></scriptCode>
       </addScriptItem> 
 

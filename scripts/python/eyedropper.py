@@ -4,29 +4,42 @@ import eyedropperprefs
 import hdefereval
 import hou
 import numpy as np
+from colorinfo import ColorInformation
 from eyedropperprefs import TransformSettings
-from PySide2.QtCore import QPoint, QRectF, Qt
-from PySide2.QtGui import QBrush, QColor, QCursor, QFont, QImage, QPainterPath, QPen
+from PySide2.QtCore import QPoint, Qt
+from PySide2.QtGui import QColor, QCursor, QImage, QPainterPath, QPen, QScreen
 from PySide2.QtWidgets import (
     QApplication,
     QFrame,
-    QGraphicsItem,
     QGraphicsPathItem,
     QGraphicsScene,
     QGraphicsView,
     QMainWindow,
 )
+from screensview import Screenshot, ScreenshotsWidget
 
 
 def transform_color(
-    color: hou.Color | tuple[float, ...], setting: TransformSettings
+    color: QColor | hou.Color | tuple[float, ...], setting: TransformSettings
 ) -> tuple[float, float, float]:
     if isinstance(color, hou.Color):
         hcolor: hou.Color = color
+    elif isinstance(color, QColor):
+        hcolor = hou.qt.fromQColor(color)[0]
     else:
         hcolor: hou.Color = hou.Color(color)
     result = hcolor.ocio_transform(setting.source_space, setting.dest_space, "")
     return result.rgb()
+
+
+def set_parm_color(parm: hou.Parm, color: hou.Color, transform: TransformSettings) -> None:
+    result = transform_color(color, transform)
+
+    if isinstance(parm, hou.ParmTuple) and len(parm) == 4:
+        alpha = parm[3].eval()
+        result = np.append(result, alpha)
+
+    parm.set(result)
 
 
 form = None
@@ -35,326 +48,72 @@ SHARP_PRECISION = 0.01
 TOLERANCE = 0.0001
 
 
-class ColorInformation(QGraphicsItem):
-    def __init__(self, parent=None):
-        super(ColorInformation, self).__init__(parent)
-        self.color = QColor(255, 255, 0)
-        self.font = QFont("courier", 10)
-        self.font.setBold(True)
-        self.pos = QPoint()
-
-    def boundingRect(self):
-        return QRectF(-15, -15, 145, 145)
-
-    def paint(self, painter, option, widget=None):
-        painter.setBrush(QBrush(self.color))
-        painter.setFont(self.font)
-
-        black_pen = QPen(Qt.black, 3, Qt.SolidLine)
-        painter.setPen(black_pen)
-
-        painter.drawLine(-10, 0, 10, 0)
-        painter.drawLine(0, -10, 0, 10)
-
-        white_pen = QPen(Qt.white, 1, Qt.SolidLine)
-        painter.setPen(white_pen)
-
-        painter.drawLine(-10, 0, 10, 0)
-        painter.drawLine(0, -10, 0, 10)
-
-        white_pen = QPen(Qt.white, 3, Qt.SolidLine)
-        painter.setPen(white_pen)
-        painter.drawRoundedRect(12, 12, 30, 74, 5, 5)
-
-        painter.setBrush(QColor(0, 0, 0, 55))
-        painter.setPen(QPen(Qt.transparent))
-        painter.drawRect(44, 12, 74, 74)
-
-        painter.setPen(QPen(Qt.red))
-        painter.drawText(50, 26, "R: " + str(self.color.red()))
-
-        painter.setPen(QPen(Qt.green))
-        painter.drawText(50, 52, "G: " + str(self.color.green()))
-
-        painter.setPen(QPen(QColor(0, 181, 249)))
-        painter.drawText(50, 80, "B: " + str(self.color.blue()))
-
-
-class ScreenshotView(QGraphicsView):
-    def __init__(self, parent, screen, parm, gradient_edit, ramp_sketch, hot_spot=QPoint(0, 0)):
-        super(ScreenshotView, self).__init__(parent)
-
-        self.hot_spot = hot_spot
-
-        self.screenshot_scene = QGraphicsScene(parent)
-        self.setScene(self.screenshot_scene)
-
-        self.parm = parm  # type: hou.Parm
-        self.screen = screen
-
-        geometry = screen.geometry()
-
-        if sys.platform == "darwin":
-            self.screen_pixmap = screen.grabWindow(
-                0, geometry.x(), geometry.y(), geometry.width(), geometry.height()
-            )
-        else:
-            self.screen_pixmap = screen.grabWindow(0)
-
-        self.screen_image = self.screen_pixmap.toImage()  # type: QImage
-
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setFrameStyle(QFrame.NoFrame)
-        self.screenshot_scene.clear()
-        self.setGeometry(screen.geometry())
-
-        self.setSceneRect(0, 0, self.screen_pixmap.width(), self.screen_pixmap.height())
-        self.screenshot_scene.addPixmap(self.screen_pixmap)
-
-        self.setMouseTracking(True)
+class ScreenshotScene:
+    def __init__(self, screenshot: Screenshot):
         self.color_info = ColorInformation()
-        self.screenshot_scene.addItem(self.color_info)
+        self.screenshot = screenshot
+        self.screenshot.scene.addItem(self.color_info)
 
-        self.gradient_edit = gradient_edit
-        self.ramp_sketch = ramp_sketch
+    def update(self, pos: QPoint, owner):
+        local_pos = pos - self.screenshot.rect.topLeft()
+        self.color_info.setPos(local_pos)
 
-        self.path = QPainterPath()
-        self.draw_path = False
-
-        self.path_item = QGraphicsPathItem()
-        if not self.ramp_sketch:
-            self.path_item.setPen(QPen(QColor(0, 200, 100, 200), 2))
-        else:
-            self.path_item.setPen(QPen(QColor(200, 200, 50, 255), 4))
-        self.screenshot_scene.addItem(self.path_item)
-
-        self.colors = []  # type: list[QColor]
-        self.positions = []  # type: list[QPoint]
-        self.picked_color = QColor()
-
-        self.disable_gamma_correction = False
-        self.transform_setting = eyedropperprefs.settings.transform
-
-        if self.underMouse():
+        if self.screenshot.rect.contains(pos):
             self.color_info.show()
         else:
             self.color_info.hide()
 
-        self.is_macos = sys.platform == "darwin"
+        image_pos = local_pos * self.screenshot.screen.devicePixelRatio()
+        image = self.screenshot.image
+        if image.rect().contains(image_pos):
+            self.color_info.color = QColor(image.pixel(image_pos.x(), image_pos.y()))
+            owner.color = self.color_info.color
 
-        # TODO: ???
-        if self.is_macos:
-            self.color_info.show()
 
-        if self.ramp_sketch:
-            self.color_info.hide()
+class ColorPicker(ScreenshotsWidget):
+    def __init__(self, parent, parm: hou.Parm):
+        super().__init__(parent)
+        for screenshot in self.screenshots:
+            screenshot.view.setMouseTracking(True)
+            screenshot.view.mouseReleaseEvent = self.close_picker
+            screenshot.view.mouseMoveEvent = self.on_mouse_move
+            screenshot.view.setCursor(Qt.BlankCursor)
 
-    def update_info(self, pos):
-        image_pos = pos * self.screen.devicePixelRatio()
-        if self.screen_image.rect().contains(image_pos):
-            self.color_info.color = QColor(self.screen_image.pixel(image_pos.x(), image_pos.y()))
-        self.color_info.setPos(pos)
-        self.color_info.pos = pos
+        self.parm = parm
+        self.scenes = [ScreenshotScene(s) for s in self.screenshots]
+        self.color = QColor()
 
-    def write_color_ramp(self):
-        if len(self.colors) < 2:
-            return
+        for scene in self.scenes:
+            scene.update(QCursor.pos(), self)
 
-        color_points = []
+    def closeEvent(self, event):
+        self.setParent(None)
+        event.accept()
 
-        vlast_color = hou.Vector3(hou.qt.fromQColor(self.colors[0])[0].rgb())
-        last_color_index = 0
+    def on_mouse_move(self, event):
+        for scene in self.scenes:
+            scene.update(event.globalPos(), self)
 
-        color_points.append((vlast_color, 0))
-
-        # remove same keys in a row
-        for index, color in enumerate(self.colors[1:]):
-            color_index = index + 1
-            vcolor = hou.Vector3(hou.qt.fromQColor(color)[0].rgb())
-            dist = vcolor.distanceTo(vlast_color)
-
-            if dist > TOLERANCE:
-                # if color_index - last_color_index > 1 and dist > SHARP_PRECISION:
-                #     color_points.append((hou.Vector3(vlast_color), color_index - 1))
-                color_points.append((hou.Vector3(vcolor), color_index))
-                vlast_color = vcolor
-                last_color_index = color_index
-
-        if color_points[-1][1] < (len(self.colors) - 1):
-            color_points.append(
-                (hou.Vector3(hou.qt.fromQColor(self.colors[-1])[0].rgb()), len(self.colors) - 1)
-            )
-
-        # Create a polyline representing ramp and remove inline points with Facet SOP
-        points = [color_point[0] for color_point in color_points]
-        pos = [color_point[1] for color_point in color_points]
-
-        ramp_geo = hou.Geometry()
-
-        pos_attrib = ramp_geo.addAttrib(
-            hou.attribType.Point, "ramp_pos", 0.0, create_local_variable=False
-        )
-
-        ramp_points = ramp_geo.createPoints(points)
-        fnum_points = float(len(self.colors) - 1)
-
-        for ptnum, point in enumerate(ramp_points):
-            point.setAttribValue(pos_attrib, float(pos[ptnum]) / fnum_points)
-
-        ramp_poly = ramp_geo.createPolygons((ramp_points,), False)[0]  # type: hou.Face
-
-        facet_verb = hou.sopNodeTypeCategory().nodeVerb("facet")  # type: hou.SopVerb
-
-        facet_verb.setParms({"inline": 1, "inlinedist": 0.02})
-
-        facet_verb.execute(ramp_geo, [ramp_geo])
-
-        ramp_poly = ramp_geo.prim(0)
-        ramp_points = ramp_poly.points()
-
-        linear = hou.rampBasis.Linear
-
-        basis = []
-        keys = []
-        values = []
-
-        pos_attrib = ramp_geo.findPointAttrib("ramp_pos")
-
-        for point in ramp_points:
-            basis.append(linear)
-            keys.append(point.attribValue(pos_attrib))
-            values.append(tuple(point.position()))
-
-        values = [transform_color(v, self.transform_setting) for v in values]
-
-        ramp = hou.Ramp(basis, keys, values)
-        self.parm.set(ramp)
-        self.parm.pressButton()
-
-    def enterEvent(self, event):
-        if not self.ramp_sketch:
-            self.color_info.show()
-
-    def leaveEvent(self, event):
-        self.color_info.hide()
-
-    def mouseMoveEvent(self, event):
-        pos = event.pos()  # * self.screen.devicePixelRatio()
-        self.update_info(pos)
-
-        # TODO: ???
-        if self.is_macos and not self.ramp_sketch:
-            self.color_info.show()
-
-        if self.draw_path:
-            path = self.path_item.path()
-            path.lineTo(pos + self.hot_spot)
-            self.path_item.setPath(path)
-            self.colors.append(self.color_info.color)
-            self.positions.append(pos)
-
-        return QGraphicsView.mouseMoveEvent(self, event)
-
-    def mousePressEvent(self, event):
+    def close_picker(self, event):
         modifiers = QApplication.keyboardModifiers()
 
-        if modifiers & Qt.ShiftModifier:
-            self.disable_gamma_correction = True
-            self.transform_setting = eyedropperprefs.settings.transform_with_shift
+        is_shift = modifiers & Qt.ShiftModifier
+        is_control = modifiers & Qt.ControlModifier
 
-        if modifiers & Qt.ControlModifier:
-            self.transform_setting = eyedropperprefs.settings.transform_with_control
+        transform = eyedropperprefs.settings.transform
+        if is_shift:
+            transform = eyedropperprefs.settings.transform_with_shift
+        if is_control:
+            transform = eyedropperprefs.settings.transform_with_control
 
-        if self.gradient_edit or self.ramp_sketch:
-            self.draw_path = True
-            self.path.moveTo(event.pos() + self.hot_spot)
-            self.path_item.setPath(self.path)
-        else:
-            self.picked_color = self.color_info.color
+        set_parm_color(self.parm, self.color, transform)
 
-    def mouseReleaseEvent(self, event):
-        if self.gradient_edit and self.draw_path:
-            self.write_color_ramp()
-        elif not self.gradient_edit:
-
-            picked_color = hou.qt.fromQColor(self.picked_color)[0]
-            out_color = transform_color(picked_color, self.transform_setting)
-
-            if isinstance(self.parm, hou.ParmTuple) and len(self.parm) == 4:
-                alpha = self.parm[3].eval()
-                out_color = np.append(out_color, alpha)
-
-            self.parm.set(out_color)
-
-        close_picker()
-
-
-class ScreensMain(QMainWindow):
-    def __init__(self, parm, gradient_edit, ramp_sketch, parent=None, screen=None):
-        super(ScreensMain, self).__init__(parent)
-
-        app = QApplication.instance()  # type: QApplication
-        screens = app.screens()
-        cursor_pos = QCursor.pos()
-
-        self.setCursor(Qt.BlankCursor)
-
-        screen_to_attach = screens[0] if screen is None else screen
-
-        view = ScreenshotView(None, screen_to_attach, parm, gradient_edit, ramp_sketch)
-        self.view = view
-        self.setWindowFlag(Qt.WindowStaysOnTopHint)
-        self.setWindowFlag(Qt.FramelessWindowHint)
-        self.setCentralWidget(view)
-        self.setGeometry(screen_to_attach.geometry())
-        self.show()
-        view.update_info(cursor_pos)
-
-        self.setMouseTracking(True)
-        self.additional_windows = []
-
-        if screen_to_attach.geometry().contains(cursor_pos) and not ramp_sketch:
-            view.color_info.show()
-        else:
-            view.color_info.hide()
-
-        if screen is None:
-            for screen in screens[1:]:
-                additional_window = ScreensMain(parm, gradient_edit, ramp_sketch, None, screen)
-                self.additional_windows.append(additional_window)
-
-    def close_children(self):
-        if self.additional_windows:
-            for window in self.additional_windows:
-                window.setParent(None)
-                window.close()
-
-    def close_all(self):
-        self.close_children()
+        self.close_all()
         self.close()
 
-    def keyPressEvent(self, event):
-        modifiers = event.modifiers()
-        shift_or_control = modifiers & Qt.ShiftModifier or modifiers & Qt.ControlModifier
-        if not shift_or_control:
-            close_picker()
 
-
-def close_picker():
-    global form
-    form.close_all()
-
-
-def show_color_picker(parm):
+def show_color_picker(parm: hou.Parm) -> None:
     parm_tuple = parm.tuple()
     if parm_tuple is not None:
-        global form
-        form = ScreensMain(parm_tuple, False, False)
-        form.show()
-
-
-def show_gradient_picker(parm):
-    global form
-    form = ScreensMain(parm, True, False)
-    form.show()
+        ui = ColorPicker(hou.qt.mainWindow(), parm_tuple)
+        ui.show()
