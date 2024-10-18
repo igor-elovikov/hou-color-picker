@@ -141,14 +141,10 @@ dmypy.json
 
 
 # VSC
-.vscode/
 *.code-workspace
 
 # Local History for Visual Studio Code
 .history/
-
-# settings file
-settings.json
 
 # packaging files
 makepackage.py

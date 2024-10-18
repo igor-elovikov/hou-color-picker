@@ -81,7 +81,7 @@ def save_settings():
 
 
 class HouIcon(QLabel):
-    def __init__(self, icon_name: str, size=64, parent: QWidget | None = None):
+    def __init__(self, icon_name: str, size=32, parent: QWidget | None = None):
         super().__init__(parent)
         icon = hou.qt.Icon(icon_name)
         if icon is not None:
@@ -109,7 +109,7 @@ class TransformSettingsEditor(QWidget):
 
         layout.addWidget(HouIcon("KEYS_LMB"))
 
-        separator = QLabel("<b><font size=18> : </font></b>")
+        separator = QLabel("<b><font size=12> : </font></b>")
         layout.addWidget(separator)
 
         source_space_selector = OcioSpaceSelector(target.source_space)
@@ -142,12 +142,12 @@ class SettingsEditor(QMainWindow):
         layout.addWidget(
             TransformSettingsEditor(
                 settings.transform_with_shift,
-                "<b><font size=18>Shift +</font></b>",
+                "<b><font size=12>Shift +</font></b>",
             )
         )
         layout.addWidget(
             TransformSettingsEditor(
-                settings.transform_with_control, "<b><font size=18>Ctrl +</font></b>"
+                settings.transform_with_control, "<b><font size=12>Ctrl +</font></b>"
             )
         )
 
