@@ -6,8 +6,8 @@
                 <insertAfter>h.ocio_editor</insertAfter>
                 <label>Color Picker Settings...</label>
                 <scriptCode><![CDATA[
-import eyedropperprefs
-eyedropperprefs.show_settings_editor()
+import eyedropper.settings
+eyedropper.settings.show_settings_editor()
                     ]]></scriptCode>
             </scriptItem>
         </subMenu>

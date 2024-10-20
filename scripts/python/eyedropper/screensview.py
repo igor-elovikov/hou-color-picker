@@ -1,10 +1,7 @@
-import datetime
-import os
 from dataclasses import dataclass
 
-import hou
-from PySide2.QtCore import QObject, QPoint, QRect, Qt
-from PySide2.QtGui import QColor, QGuiApplication, QPainter, QPen, QPixmap, QScreen
+from PySide2.QtCore import QObject, QRect, Qt
+from PySide2.QtGui import QPixmap, QScreen
 from PySide2.QtWidgets import QApplication, QGraphicsScene, QGraphicsView, QWidget
 
 

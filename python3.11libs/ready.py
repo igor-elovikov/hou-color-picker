@@ -1,3 +1,4 @@
-import eyedropperprefs  # type: ignore
+import eyedropper.settings  # type: ignore
 
-eyedropperprefs.load_settings()  # type: ignore
+eyedropper.settings.load_settings()  # type: ignore
+eyedropper.settings.save_settings()  # type: ignore

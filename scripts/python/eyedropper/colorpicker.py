@@ -1,48 +1,12 @@
-import sys
-
-import eyedropperprefs
-import hdefereval
 import hou
-import numpy as np
-from colorinfo import ColorInformation
-from eyedropperprefs import TransformSettings
 from PySide2.QtCore import QPoint, Qt
-from PySide2.QtGui import QColor, QCursor, QImage, QPainterPath, QPen, QScreen
-from PySide2.QtWidgets import (
-    QApplication,
-    QFrame,
-    QGraphicsPathItem,
-    QGraphicsScene,
-    QGraphicsView,
-    QMainWindow,
-)
-from screensview import Screenshot, ScreenshotsWidget
+from PySide2.QtGui import QColor, QCursor
+from PySide2.QtWidgets import QApplication
 
-
-def transform_color(
-    color: QColor | hou.Color | tuple[float, ...], setting: TransformSettings
-) -> tuple[float, float, float]:
-    if isinstance(color, hou.Color):
-        hcolor: hou.Color = color
-    elif isinstance(color, QColor):
-        hcolor = hou.qt.fromQColor(color)[0]
-    else:
-        hcolor: hou.Color = hou.Color(color)
-    result = hcolor.ocio_transform(setting.source_space, setting.dest_space, "")
-    return result.rgb()
-
-
-def set_parm_color(parm: hou.Parm, color: hou.Color, transform: TransformSettings) -> None:
-    result = transform_color(color, transform)
-
-    if isinstance(parm, hou.ParmTuple) and len(parm) == 4:
-        alpha = parm[3].eval()
-        result = np.append(result, alpha)
-
-    parm.set(result)
-
-
-form = None
+from .colorinfo import ColorInformation
+from .screensview import Screenshot, ScreenshotsWidget
+from .settings import settings
+from .utils import set_parm_color
 
 SHARP_PRECISION = 0.01
 TOLERANCE = 0.0001
@@ -77,6 +41,7 @@ class ColorPicker(ScreenshotsWidget):
             screenshot.view.setMouseTracking(True)
             screenshot.view.mouseReleaseEvent = self.close_picker
             screenshot.view.mouseMoveEvent = self.on_mouse_move
+            screenshot.view.keyPressEvent = self.on_key_press
             screenshot.view.setCursor(Qt.BlankCursor)
 
         self.parm = parm
@@ -100,16 +65,25 @@ class ColorPicker(ScreenshotsWidget):
         is_shift = modifiers & Qt.ShiftModifier
         is_control = modifiers & Qt.ControlModifier
 
-        transform = eyedropperprefs.settings.transform
+        transform = settings.transform
         if is_shift:
-            transform = eyedropperprefs.settings.transform_with_shift
+            transform = settings.transform_with_shift
         if is_control:
-            transform = eyedropperprefs.settings.transform_with_control
+            transform = settings.transform_with_control
 
         set_parm_color(self.parm, self.color, transform)
 
         self.close_all()
         self.close()
+
+    def on_key_press(self, event):
+        modifiers = event.modifiers()
+        shift_or_control = modifiers & Qt.ShiftModifier or modifiers & Qt.ControlModifier
+        if not shift_or_control:
+            self.close_all()
+            self.close()
+
+        event.accept()
 
 
 def show_color_picker(parm: hou.Parm) -> None:

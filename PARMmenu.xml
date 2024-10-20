@@ -7,18 +7,18 @@
         <label>Color Eyedropper</label>
         <context>
           <expression><![CDATA[
-import eyedropperutils
-return eyedropperutils.is_color_parm(kwargs["parms"])          
+import eyedropper.utils
+return eyedropper.utils.is_color_parm(kwargs["parms"])          
           ]]></expression>
         </context>    
         <scriptCode><![CDATA[
-import eyedropper
-eyedropper.show_color_picker(kwargs["parms"][0])
+import eyedropper.colorpicker
+eyedropper.colorpicker.show_color_picker(kwargs["parms"][0])
 ]]></scriptCode>
       </addScriptItem>
 
 
-      <addScriptItem id="ie_gradient_picker">
+      <!-- <addScriptItem id="ie_gradient_picker">
         <parent>root_menu</parent>
         <insertBefore>revert_to_prev_val</insertBefore>
         <label>Gradient Eyedropper</label>
@@ -32,7 +32,7 @@ return eyedropperutils.is_color_ramp(kwargs["parms"])
 import eyedropper
 eyedropper.show_gradient_picker(kwargs["parms"][0])
 ]]></scriptCode>
-      </addScriptItem> 
+      </addScriptItem>  -->
 
     </menu>
 </menuDocument>
