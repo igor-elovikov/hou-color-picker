@@ -1,4 +1,5 @@
 import hou
+import numpy as np
 from PySide2.QtGui import QColor
 
 from .settings import TransformSettings
